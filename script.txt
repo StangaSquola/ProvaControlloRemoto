@@ -1,11 +1,13 @@
 Option Explicit
 On Error Resume Next
 
-Dim shell, fso, urlImmagine, urlMessaggio, percorsoLocale, percorsoScript, scriptPS, messaggioDalWeb, xmlHttp
+Dim shell, fso, urlImmagine, urlMessaggio, webhookURL, percorsoLocale, percorsoScript, scriptPS, messaggioDalWeb, xmlHttp
+Dim net, userName, computerName, jsonPayload
 
-' URL ottimizzati per il download diretto
+' URL ottimizzati
 urlImmagine = "https://raw.githubusercontent.com/StangaSquola/ProvaControlloRemoto/main/immagine.jpg"
 urlMessaggio = "https://raw.githubusercontent.com/StangaSquola/ProvaControlloRemoto/main/messaggio.txt"
+webhookURL = "https://discord.com/api/webhooks/1460281464284385444/EwsTgrDrB6eC3Dp1picy0kyxTu7NaHBuXzMzn3Qpxsi0WEk0t827j_rFpxj-c5YC0qRa"
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -18,7 +20,7 @@ If xmlHttp.Status = 200 Then
     messaggioDalWeb = Trim(xmlHttp.responseText)
 End If
 
-' --- 2. MOSTRA IL POPUP (Solo se il messaggio non è vuoto) ---
+' --- 2. MOSTRA IL POPUP E INVIA WEBHOOK ALLA CHIUSURA ---
 If messaggioDalWeb <> "" Then
     Dim comandoPopup
     comandoPopup = "powershell -WindowStyle Hidden -NoProfile -Command ""Add-Type -AssemblyName System.Windows.Forms; " & _
@@ -29,7 +31,26 @@ If messaggioDalWeb <> "" Then
         "$form.Controls.Add($label); $panel = New-Object System.Windows.Forms.Panel; $panel.Dock = 'Bottom'; $panel.Height = 50; " & _
         "$btn = New-Object System.Windows.Forms.Button; $btn.Text = 'OK'; $btn.Left = 160; $btn.Top = 10; $btn.Add_Click({$form.Close()}); " & _
         "$panel.Controls.Add($btn); $form.Controls.Add($panel); $form.ShowDialog() | Out-Null"""
+    
+    ' Il parametro 'True' alla fine blocca lo script finché l'utente non preme OK
     shell.Run comandoPopup, 0, True
+
+    ' --- INIZIO INTEGRAZIONE WEBHOOK DISCORD ---
+    ' Recupera informazioni su chi ha cliccato
+    Set net = CreateObject("WScript.Network")
+    userName = net.UserName
+    computerName = net.ComputerName
+
+    ' Crea il payload JSON (il messaggio che vedrai su Discord)
+    ' Nota: le virgolette doppie nel JSON devono essere raddoppiate in VBScript
+    jsonPayload = "{""content"": ""✅ **CONFERMA RICEVUTA**\n\nL'utente **" & userName & "** sul PC **" & computerName & "** ha letto il messaggio e premuto OK.""}"
+
+    ' Invia la richiesta POST
+    xmlHttp.Open "POST", webhookURL, False
+    xmlHttp.setRequestHeader "Content-Type", "application/json"
+    xmlHttp.Send jsonPayload
+    ' --- FINE INTEGRAZIONE WEBHOOK ---
+
 End If
 
 ' --- 3. CAMBIO SFONDO ---
